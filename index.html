@@ -48,8 +48,17 @@ pre code{background:none;padding:0}
 .card b{display:block;margin-bottom:2px}
 .card span{color:var(--mut)}
 #bar{padding:8px 16px calc(12px + env(safe-area-inset-bottom,0px))}
-#box{max-width:760px;margin:0 auto;background:var(--bub);border:1px solid var(--line);border-radius:28px;display:flex;align-items:flex-end;padding:8px 8px 8px 20px}
+#box{max-width:760px;margin:0 auto;background:var(--bub);border:1px solid var(--line);border-radius:28px;display:flex;align-items:flex-end;padding:8px 8px 8px 8px}
 textarea{flex:1;background:none;border:0;outline:0;color:var(--text);font:inherit;resize:none;max-height:200px;padding:8px 0}
+#prev{max-width:760px;margin:0 auto 8px;display:flex;gap:8px;flex-wrap:wrap;padding:0 4px}
+#prev:empty{display:none}
+.th{position:relative;width:64px;height:64px;border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+.th img{width:100%;height:100%;object-fit:cover;display:block}
+.th button{position:absolute;top:2px;right:2px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.65);color:#fff;font-size:13px;line-height:1}
+#attach{width:38px;height:38px;border-radius:50%;font-size:24px;color:var(--mut);flex-shrink:0;margin-right:6px}
+#attach:hover{color:var(--text);background:var(--card)}
+.uimgs{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;margin-bottom:6px}
+.uimgs img{max-width:200px;max-height:200px;border-radius:14px;display:block}
 #send{width:38px;height:38px;border-radius:50%;background:var(--g);color:#fff;font-size:18px;font-weight:700}
 #send:disabled{opacity:.35;cursor:default}
 #note{text-align:center;color:var(--mut);font-size:12px;margin-top:8px}
@@ -92,7 +101,8 @@ textarea{flex:1;background:none;border:0;outline:0;color:var(--text);font:inheri
   <div id="top"><button id="menu">&#9776;</button><span id="title">Sutton AI</span></div>
   <div id="chat"><div class="wrap" id="log"></div></div>
   <div id="bar">
-    <div id="box"><textarea id="in" rows="1" placeholder="Message Sutton AI"></textarea><button id="send" disabled>&#8593;</button></div>
+    <div id="prev"></div>
+    <div id="box"><button id="attach" title="Add photos">+</button><input type="file" id="file" accept="image/*" multiple hidden><textarea id="in" rows="1" placeholder="Message Sutton AI"></textarea><button id="send" disabled>&#8593;</button></div>
     <div id="note">Sutton AI can make mistakes. Double check important info.</div>
   </div>
 </div>
@@ -109,7 +119,7 @@ const $=id=>document.getElementById(id),log=$("log"),inp=$("in"),send=$("send"),
 const CARDS=[["Explain something","Break down a tricky topic simply","Explain how compound interest works in simple terms"],["Write for me","Draft an email, essay, or post","Help me write a professional email asking for a meeting"],["Plan it out","Build a schedule or step-by-step plan","Help me plan a productive weekly schedule"],["Fix my code","Debug or write a script","Write a Python script that renames all files in a folder"]];
 function load(k,d){try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}}
 let chats=load("sutton_chats",[]).filter(c=>c.msgs&&c.msgs.length),mem=load("sutton_mem",[]),cur=null,busy=false;
-function save(){try{localStorage.setItem("sutton_chats",JSON.stringify(chats));localStorage.setItem("sutton_mem",JSON.stringify(mem))}catch(e){}}
+function save(){try{localStorage.setItem("sutton_chats",JSON.stringify(chats.map(c=>({...c,msgs:c.msgs.map(m=>{const {full,...r}=m;return r})}))));localStorage.setItem("sutton_mem",JSON.stringify(mem))}catch(e){}}
 const esc=s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 function md(t){return esc(t).split("```").map((p,i)=>i%2?"<pre><code>"+p.replace(/^\w*\n/,"")+"</code></pre>":p.replace(/^#{1,6} (.+)$/gm,"<b>$1</b>").replace(/^[ \t]*[-*] /gm,"\u2022 ").replace(/`([^`]+)`/g,"<code>$1</code>").replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>")).join("")}
 function toast(t){const e=$("toast");e.textContent=t;e.className="show";setTimeout(()=>e.className="",2200)}
@@ -146,7 +156,7 @@ function addCopy(c,text){
 function render(){
   log.innerHTML="";
   if(!cur||!cur.msgs.length)hero();
-  else cur.msgs.forEach(m=>{const r=add(m.role,m.role==="user"?esc(m.content):md(m.content));if(m.role==="assistant")addCopy(r.c,m.content)});
+  else cur.msgs.forEach(m=>{const r=add(m.role,m.role==="user"?esc(m.content):md(m.content));if(m.thumbs)r.c.insertBefore(imgStrip(m.thumbs),r.b);if(m.role==="assistant")addCopy(r.c,m.content)});
   renderList();$("title").textContent=cur?cur.title:"Sutton AI";
 }
 function learn(t){
@@ -161,22 +171,45 @@ async function reveal(b,t){
   for(let i=0;i<w.length;i++){s+=w[i];if(i%6===0){b.innerHTML=md(s);chat.scrollTop=chat.scrollHeight;await new Promise(r=>setTimeout(r,10))}}
   b.innerHTML=md(t);chat.scrollTop=chat.scrollHeight;
 }
+let pending=[];
+function imgStrip(th){const d=document.createElement("div");d.className="uimgs";th.forEach(u=>{const i=document.createElement("img");i.src=u;d.appendChild(i)});return d}
+function shrink(file,max,q){return new Promise((res,rej)=>{const u=URL.createObjectURL(file),im=new Image();im.onload=()=>{const k=Math.min(1,max/Math.max(im.width,im.height)),c=document.createElement("canvas");c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);const x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,c.width,c.height);x.drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);res(c.toDataURL("image/jpeg",q))};im.onerror=()=>{URL.revokeObjectURL(u);rej(new Error("bad image"))};im.src=u})}
+async function addFiles(files){
+  for(const f of files){
+    if(!f.type.startsWith("image/"))continue;
+    if(pending.length>=3){toast("Up to 3 photos per message");break}
+    try{pending.push({full:await shrink(f,1280,.8),thumb:await shrink(f,160,.6)})}catch(e){toast("Could not read that image")}
+  }
+  renderPrev();
+}
+function renderPrev(){
+  const p=$("prev");p.innerHTML="";
+  pending.forEach((m,i)=>{const d=document.createElement("div");d.className="th";const im=document.createElement("img");im.src=m.thumb;const x=document.createElement("button");x.textContent="\u00d7";x.onclick=()=>{pending.splice(i,1);renderPrev()};d.append(im,x);p.appendChild(d)});
+  send.disabled=busy||(!inp.value.trim()&&!pending.length);
+}
 async function go(){
-  const text=inp.value.trim();if(!text||busy)return;
-  if(!cur){cur={id:String(Date.now()),title:text.slice(0,40),msgs:[]};chats.unshift(cur)}
+  const text=inp.value.trim();if((!text&&!pending.length)||busy)return;
+  const imgs=pending;pending=[];renderPrev();
+  if(!cur){cur={id:String(Date.now()),title:(text||"Photo chat").slice(0,40),msgs:[]};chats.unshift(cur)}
   if(!cur.msgs.length)log.innerHTML="";
   busy=true;send.disabled=true;inp.value="";inp.style.height="auto";
-  cur.msgs.push({role:"user",content:text});add("user",esc(text));renderList();
+  const m={role:"user",content:text||"Describe this image."};
+  if(imgs.length){m.thumbs=imgs.map(i=>i.thumb);m.full=imgs.map(i=>i.full)}
+  cur.msgs.push(m);
+  const ur=add("user",esc(m.content));if(m.thumbs)ur.c.insertBefore(imgStrip(m.thumbs),ur.b);
+  renderList();
   const r=add("assistant",'<span class="dots"><i></i><i></i><i></i></span>');
+  const keep=new Set(cur.msgs.map((x,i)=>x.full?i:-1).filter(i=>i>=0).slice(-2));
+  const payload=cur.msgs.map((x,i)=>keep.has(i)?{role:x.role,content:x.content,images:x.full}:{role:x.role,content:x.thumbs?x.content+" [a photo was attached here]":x.content});
   try{
-    const res=await fetch("/api/chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({messages:cur.msgs,memory:mem})});
+    const res=await fetch("/api/chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({messages:payload,memory:mem})});
     const d=await res.json();
     if(!res.ok)throw new Error(d.error||"Something went wrong");
     const reply=learn(d.reply)||"Sorry, I could not answer that. Try rephrasing.";
     cur.msgs.push({role:"assistant",content:reply});
     await reveal(r.b,reply);addCopy(r.c,reply);
-  }catch(e){r.b.textContent="Error: "+e.message;cur.msgs.pop();inp.value=text}
-  save();busy=false;send.disabled=!inp.value.trim();renderList();
+  }catch(e){r.b.textContent="Error: "+e.message;cur.msgs.pop();inp.value=text;pending=imgs;renderPrev()}
+  save();busy=false;renderPrev();renderList();
 }
 function renderMem(){
   const l=$("mlist");l.innerHTML="";
@@ -188,9 +221,14 @@ function renderMem(){
     d.append(s,x);l.appendChild(d);
   });
 }
-inp.addEventListener("input",()=>{inp.style.height="auto";inp.style.height=inp.scrollHeight+"px";send.disabled=busy||!inp.value.trim()});
+inp.addEventListener("input",()=>{inp.style.height="auto";inp.style.height=inp.scrollHeight+"px";renderPrev()});
 inp.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();go()}});
 send.onclick=go;
+$("attach").onclick=()=>$("file").click();
+$("file").onchange=e=>{addFiles(e.target.files);e.target.value=""};
+inp.addEventListener("paste",e=>{const f=[...(e.clipboardData&&e.clipboardData.files||[])];if(f.length){e.preventDefault();addFiles(f)}});
+document.addEventListener("dragover",e=>e.preventDefault());
+document.addEventListener("drop",e=>{e.preventDefault();addFiles(e.dataTransfer.files)});
 $("newb").onclick=()=>{cur=null;render();closeSide()};
 $("menu").onclick=()=>{$("side").classList.add("open");$("ov").style.display="block"};
 $("ov").onclick=closeSide;
