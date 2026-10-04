@@ -61,17 +61,15 @@ function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g
 function md(t){
   let parts=esc(t).split("```");
   return parts.map((p,i)=>i%2?"<pre><code>"+p.replace(/^\w*\n/,"")+"</code></pre>":
-    p.replace(/^#{1,6} (.+)/gm,"<b>1</b>").replace(/^\s*[-*] /gm,"\u2022 ").replace(/`([^`]+)`/g,"<code>$1</code>").replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>")).join("");
+    p.replace(/^#{1,6} (.+)$/gm,"<b>$1</b>").replace(/^\s*[-*] /gm,"\u2022 ").replace(/`([^`]+)`/g,"<code>$1</code>").replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>")).join("");
 }
 function mathify(el){
   if(!window.renderMathInElement)return;
   try{renderMathInElement(el,{delimiters:[
-    {left:"
-",right:"
-",display:true},
+    {left:"$$",right:"$$",display:true},
     {left:"\\[",right:"\\]",display:true},
     {left:"\\(",right:"\\)",display:false},
-    {left:"",right:"",display:false}
+    {left:"$",right:"$",display:false}
   ],throwOnError:false})}catch(e){}
 }
 function add(role,text,raw){
@@ -105,4 +103,3 @@ window.addEventListener("load",render);
 </script>
 </body>
 </html>
-
