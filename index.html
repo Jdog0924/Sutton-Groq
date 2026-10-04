@@ -100,6 +100,11 @@ textarea{flex:1;background:none;border:0;outline:0;color:var(--text);font:inheri
 textarea{line-height:24px;padding:7px 4px}
 .av{margin-top:-2px}
 .nb,.ci{min-height:40px;padding-top:0;padding-bottom:0;display:flex;align-items:center}
+.gen{margin-top:10px}
+.gen img{display:block;max-width:min(100%,420px);border-radius:14px;border:1px solid var(--line)}
+.gen a.cp{display:inline-block;text-decoration:none}
+.ph{width:min(100%,320px);aspect-ratio:1;border-radius:14px;background:linear-gradient(110deg,var(--card) 30%,var(--bub) 50%,var(--card) 70%);background-size:200% 100%;animation:sh 1.4s linear infinite;display:grid;place-items:center;color:var(--mut);font-size:14px}
+@keyframes sh{to{background-position:-200% 0}}
 </style>
 </head>
 <body>
@@ -129,10 +134,10 @@ textarea{line-height:24px;padding:7px 4px}
 <div id="toast"></div>
 <script>
 const $=id=>document.getElementById(id),log=$("log"),inp=$("in"),send=$("send"),chat=$("chat");
-const CARDS=[["Explain something","Break down a tricky topic simply","Explain how compound interest works in simple terms"],["Write for me","Draft an email, essay, or post","Help me write a professional email asking for a meeting"],["Plan it out","Build a schedule or step-by-step plan","Help me plan a productive weekly schedule"],["Fix my code","Debug or write a script","Write a Python script that renames all files in a folder"]];
+const CARDS=[["Explain something","Break down a tricky topic simply","Explain how compound interest works in simple terms"],["Write for me","Draft an email, essay, or post","Help me write a professional email asking for a meeting"],["Plan it out","Build a schedule or step-by-step plan","Help me plan a productive weekly schedule"],["Fix my code","Debug or write a script","Write a Python script that renames all files in a folder"],["Make an image","Describe it and I will draw it","Create an image of a glowing futuristic city at sunset"],["Brainstorm ideas","Get creative project or business ideas","Give me 10 creative side project ideas"]];
 function load(k,d){try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}}
 let chats=load("sutton_chats",[]).filter(c=>c.msgs&&c.msgs.length),mem=load("sutton_mem",[]),cur=null,busy=false;
-function save(){try{localStorage.setItem("sutton_chats",JSON.stringify(chats.map(c=>({...c,msgs:c.msgs.map(m=>{const {full,...r}=m;return r})}))));localStorage.setItem("sutton_mem",JSON.stringify(mem))}catch(e){}}
+function save(){try{localStorage.setItem("sutton_chats",JSON.stringify(chats.map(c=>({...c,msgs:c.msgs.map(m=>{const {full,fullImg,...r}=m;return r})}))));localStorage.setItem("sutton_mem",JSON.stringify(mem))}catch(e){}}
 const esc=s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 function md(t){return esc(t).split("```").map((p,i)=>i%2?"<pre><code>"+p.replace(/^\w*\n/,"")+"</code></pre>":p.replace(/^#{1,6} (.+)$/gm,"<b>$1</b>").replace(/^[ \t]*[-*] /gm,"\u2022 ").replace(/`([^`]+)`/g,"<code>$1</code>").replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>")).join("")}
 function toast(t){const e=$("toast");e.textContent=t;e.className="show";setTimeout(()=>e.className="",2200)}
@@ -169,7 +174,7 @@ function addCopy(c,text){
 function render(){
   log.innerHTML="";
   if(!cur||!cur.msgs.length)hero();
-  else cur.msgs.forEach(m=>{const r=add(m.role,m.role==="user"?esc(m.content):md(m.content));if(m.thumbs)r.c.insertBefore(imgStrip(m.thumbs),r.b);if(m.role==="assistant")addCopy(r.c,m.content)});
+  else cur.msgs.forEach(m=>{const r=add(m.role,m.role==="user"?esc(m.content):md(m.content));if(m.thumbs)r.c.insertBefore(imgStrip(m.thumbs),r.b);if(m.role==="assistant"){if(m.genImg){const bx=document.createElement("div");bx.className="gen";showImg(bx,m);r.c.appendChild(bx)}addCopy(r.c,m.content)}});
   renderList();$("title").textContent=cur?cur.title:"Sutton AI";
 }
 function learn(t){
@@ -179,9 +184,25 @@ function learn(t){
   if(n)toast("Memory saved");
   return t.trim();
 }
+function splitImg(t){let p=null;t=t.replace(/\[\[image:\s*([^\]]+?)\s*\]\]/gi,(m,x)=>{p=p||x.slice(0,900);return""});return [t.trim(),p]}
+function shrinkURL(u,max,q){return new Promise(res=>{const im=new Image();im.onload=()=>{const k=Math.min(1,max/Math.max(im.width,im.height)),c=document.createElement("canvas");c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);c.getContext("2d").drawImage(im,0,0,c.width,c.height);res(c.toDataURL("image/jpeg",q))};im.onerror=()=>res(u);im.src=u})}
+function showImg(box,m){
+  box.innerHTML="";
+  const i=document.createElement("img");i.src=m.fullImg||m.genImg;i.alt="Generated image";
+  const a=document.createElement("a");a.className="cp";a.textContent="Download";a.href=m.fullImg||m.genImg;a.download="sutton-ai-image.jpg";
+  box.append(i,a);
+}
+async function fillImg(box,prompt,am){
+  try{
+    const res=await fetch("/api/image",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({prompt})});
+    const d=await res.json();if(!res.ok)throw new Error(d.error||"Image failed");
+    am.fullImg=d.image;am.genImg=await shrinkURL(d.image,512,.7);showImg(box,am);
+  }catch(e){box.textContent="Sorry, I couldn't create that image ("+e.message+")."}
+  chat.scrollTop=chat.scrollHeight;
+}
 async function reveal(b,t){
-  const w=t.split(/(\s+)/);let s="";
-  for(let i=0;i<w.length;i++){s+=w[i];if(i%6===0){b.innerHTML=md(s);chat.scrollTop=chat.scrollHeight;await new Promise(r=>setTimeout(r,10))}}
+  const w=t.split(/(\s+)/),step=4,d=Math.max(8,Math.min(45,Math.floor(12000/(w.length/step))));let s="";
+  for(let i=0;i<w.length;i++){s+=w[i];if(i%step===0){b.innerHTML=md(s);chat.scrollTop=chat.scrollHeight;await new Promise(r=>setTimeout(r,d))}}
   b.innerHTML=md(t);chat.scrollTop=chat.scrollHeight;
 }
 let pending=[];
@@ -214,14 +235,19 @@ async function go(){
   renderList();
   const r=add("assistant",'<span class="dots"><i></i><i></i><i></i></span>');
   const keep=new Set(cur.msgs.map((x,i)=>x.full?i:-1).filter(i=>i>=0).slice(-2));
-  const payload=cur.msgs.map((x,i)=>keep.has(i)?{role:x.role,content:x.content,images:x.full}:{role:x.role,content:x.thumbs?x.content+" [a photo was attached here]":x.content});
+  const payload=cur.msgs.map((x,i)=>keep.has(i)?{role:x.role,content:x.content,images:x.full}:{role:x.role,content:x.content+(x.thumbs?" [a photo was attached here]":"")+(x.genImg?" [an image was generated here]":"")});
   try{
     const res=await fetch("/api/chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({messages:payload,memory:mem})});
     const d=await res.json();
     if(!res.ok)throw new Error(d.error||"Something went wrong");
-    const reply=learn(d.reply)||"Sorry, I could not answer that. Try rephrasing.";
-    cur.msgs.push({role:"assistant",content:reply});
-    await reveal(r.b,reply);addCopy(r.c,reply);
+    let [reply,ip]=splitImg(learn(d.reply));
+    if(!reply)reply=ip?"Sure, creating that now!":"Sorry, I could not answer that. Try rephrasing.";
+    const am={role:"assistant",content:reply};cur.msgs.push(am);
+    await reveal(r.b,reply);
+    let box=null;
+    if(ip){box=document.createElement("div");box.className="gen";box.innerHTML='<div class="ph">Creating your image...</div>';r.c.appendChild(box)}
+    addCopy(r.c,reply);
+    if(ip)await fillImg(box,ip,am);
   }catch(e){r.b.textContent="Error: "+e.message;cur.msgs.pop();inp.value=text;pending=imgs;renderPrev()}
   save();busy=false;renderPrev();renderList();
 }
