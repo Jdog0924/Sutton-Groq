@@ -1,38 +1,205 @@
-// Groq version, general-purpose assistant (plain-text math). Paste this over api/chat.js on GitHub. Set GROQ_API_KEY and MODEL in Vercel.
-const SYSTEM = `You are Sutton AI, a helpful, friendly, general-purpose AI assistant. Answer questions, explain ideas, write and edit text of any length, brainstorm, plan, summarize, translate, analyze, and help with code, math, business, and everyday tasks. Be direct, accurate, and conversational. Give complete answers when asked for long content, and keep casual answers short. If you are unsure about something, say so instead of guessing. FORMATTING RULES: Never use LaTeX, backslashes, or dollar signs for math. Write math in plain text with Unicode symbols, for example x² + 5x + 6 = 0, x = (−b ± √(b² − 4ac)) / 2a, 3/4, π, ≤, ≥. Never use tables, horizontal lines, or # headings. For section titles use bold text like **Step 1: Factor**. For lists use numbered lines like 1. or lines that start with a dash and a space. For code, use triple backtick code blocks.`;
-
-export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
-
-  const body = req.body || {};
-  let messages = Array.isArray(body.messages) ? body.messages : [];
-  messages = messages
-    .filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
-    .slice(-20)
-    .map((m) => ({ role: m.role, content: m.content.slice(0, 12000) }));
-
-  if (!messages.length || messages[0].role !== "user") {
-    return res.status(400).json({ error: "Bad request" });
-  }
-
-  try {
-    const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: "Bearer " + process.env.GROQ_API_KEY,
-      },
-      body: JSON.stringify({
-        model: process.env.MODEL || "llama-3.3-70b-versatile",
-        max_tokens: 4000,
-        messages: [{ role: "system", content: SYSTEM }, ...messages],
-      }),
-    });
-    const data = await r.json();
-    if (!r.ok) return res.status(500).json({ error: data?.error?.message || "Model error" });
-    const reply = data?.choices?.[0]?.message?.content || "";
-    return res.status(200).json({ reply });
-  } catch (e) {
-    return res.status(500).json({ error: "Server error" });
-  }
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sutton AI</title>
+<style>
+:root{--bg:#212121;--side:#171717;--card:#2a2a2a;--bub:#303030;--text:#ececec;--mut:#9b9b9b;--line:#363636;--g:linear-gradient(135deg,#10a37f,#5b8def 60%,#a855f7)}
+@media (prefers-color-scheme: light){:root{--bg:#fff;--side:#f7f7f8;--card:#f4f4f5;--bub:#efefef;--text:#1f2023;--mut:#6b6b6b;--line:#e3e3e3}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font:16px/1.65 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;display:flex;overflow:hidden}
+button{font:inherit;color:inherit;cursor:pointer;background:none;border:0}
+#side{width:272px;background:var(--side);display:flex;flex-direction:column;padding:12px;gap:6px;flex-shrink:0;transition:transform .25s}
+.logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px;padding:6px 8px 10px}
+.mark{width:30px;height:30px;border-radius:50%;background:var(--g);display:grid;place-items:center;color:#fff;font-weight:700;font-size:15px;flex-shrink:0}
+.nb{display:block;width:100%;text-align:left;padding:10px 12px;border-radius:12px;font-weight:500}
+.nb:hover,.ci:hover,.ci.on{background:var(--bub)}
+#list{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
+.lab{font-size:12px;color:var(--mut);padding:10px 12px 4px}
+.ci{display:flex;align-items:center;gap:6px;padding:9px 12px;border-radius:10px;font-size:14px;cursor:pointer}
+.ci span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ci .x{opacity:0;color:var(--mut);padding:0 4px}
+.ci:hover .x{opacity:1}
+#main{flex:1;display:flex;flex-direction:column;min-width:0;height:100dvh}
+#top{display:none;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);font-weight:600}
+#chat{flex:1;overflow-y:auto;padding:24px 16px}
+.wrap{max-width:760px;margin:0 auto}
+.msg{display:flex;gap:14px;margin:22px 0}
+.msg.user{justify-content:flex-end}
+.av{width:30px;height:30px;border-radius:50%;background:var(--g);color:#fff;display:grid;place-items:center;font-weight:700;font-size:14px;flex-shrink:0;margin-top:2px}
+.col{min-width:0;max-width:calc(100% - 44px)}
+.user .col{max-width:85%}
+.bub{white-space:pre-wrap;word-wrap:break-word}
+.user .bub{background:var(--bub);padding:10px 18px;border-radius:22px}
+.cp{font-size:12px;color:var(--mut);margin-top:6px}
+.cp:hover{color:var(--text)}
+pre{background:#0d0d0d;color:#eee;padding:14px;border-radius:12px;overflow-x:auto;white-space:pre;font-size:14px}
+code{background:var(--bub);padding:1px 6px;border-radius:6px;font-size:.9em}
+pre code{background:none;padding:0}
+#hero{text-align:center;margin-top:10vh}
+#hero .mark{width:56px;height:56px;font-size:26px;margin:0 auto 18px}
+#hero h2{font-size:32px;margin:0 0 6px;font-weight:650}
+#hero p{color:var(--mut);margin:0 0 28px}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:10px;text-align:left}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;font-size:14px;line-height:1.4}
+.card:hover{background:var(--bub)}
+.card b{display:block;margin-bottom:2px}
+.card span{color:var(--mut)}
+#bar{padding:8px 16px calc(12px + env(safe-area-inset-bottom,0px))}
+#box{max-width:760px;margin:0 auto;background:var(--bub);border:1px solid var(--line);border-radius:28px;display:flex;align-items:flex-end;padding:8px 8px 8px 20px}
+textarea{flex:1;background:none;border:0;outline:0;color:var(--text);font:inherit;resize:none;max-height:200px;padding:8px 0}
+#send{width:38px;height:38px;border-radius:50%;background:var(--g);color:#fff;font-size:18px;font-weight:700}
+#send:disabled{opacity:.35;cursor:default}
+#note{text-align:center;color:var(--mut);font-size:12px;margin-top:8px}
+.dots i{display:inline-block;width:7px;height:7px;margin:8px 2px;border-radius:50%;background:var(--mut);animation:b 1s infinite}
+.dots i:nth-child(2){animation-delay:.15s}
+.dots i:nth-child(3){animation-delay:.3s}
+@keyframes b{50%{opacity:.2}}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:30;padding:16px}
+#mbox{background:var(--bg);border:1px solid var(--line);border-radius:18px;padding:20px;width:100%;max-width:460px;max-height:80vh;display:flex;flex-direction:column;gap:10px}
+#mbox h3{margin:0}
+#mbox p{margin:0;color:var(--mut);font-size:14px}
+#mlist{overflow-y:auto;display:flex;flex-direction:column;gap:6px}
+.mi{display:flex;justify-content:space-between;gap:10px;background:var(--card);padding:8px 12px;border-radius:10px;font-size:14px}
+.mi button{color:var(--mut)}
+.mrow{display:flex;gap:8px}
+.mrow input{flex:1;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px;color:var(--text);font:inherit;outline:0}
+.btn{background:var(--g);color:#fff;border-radius:10px;padding:8px 14px;font-weight:600}
+.btn2{background:var(--card);border-radius:10px;padding:8px 14px}
+#toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--line);padding:8px 16px;border-radius:20px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .3s;z-index:40}
+#toast.show{opacity:1}
+#ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:19}
+@media (max-width:760px){
+  #side{position:fixed;inset:0 auto 0 0;z-index:20;transform:translateX(-100%)}
+  #side.open{transform:none}
+  #top{display:flex}
+  .cards{grid-template-columns:1fr}
+  #hero{margin-top:4vh}
 }
+</style>
+</head>
+<body>
+<aside id="side">
+  <div class="logo"><div class="mark">S</div>Sutton AI</div>
+  <button class="nb" id="newb">+ New chat</button>
+  <div id="list"></div>
+  <button class="nb" id="memb">Memory</button>
+</aside>
+<div id="ov"></div>
+<div id="main">
+  <div id="top"><button id="menu">&#9776;</button><span id="title">Sutton AI</span></div>
+  <div id="chat"><div class="wrap" id="log"></div></div>
+  <div id="bar">
+    <div id="box"><textarea id="in" rows="1" placeholder="Message Sutton AI"></textarea><button id="send" disabled>&#8593;</button></div>
+    <div id="note">Sutton AI can make mistakes. Double check important info.</div>
+  </div>
+</div>
+<div id="modal"><div id="mbox">
+  <h3>Memory</h3>
+  <p>Sutton AI saves lasting facts you share. They stay in this browser, and you can delete any of them.</p>
+  <div id="mlist"></div>
+  <div class="mrow"><input id="madd" placeholder="Add something to remember"><button class="btn" id="maddb">Add</button></div>
+  <div class="mrow"><button class="btn2" id="mclear">Clear all</button><button class="btn2" id="mclose">Close</button></div>
+</div></div>
+<div id="toast"></div>
+<script>
+const $=id=>document.getElementById(id),log=$("log"),inp=$("in"),send=$("send"),chat=$("chat");
+const CARDS=[["Explain something","Break down a tricky topic simply","Explain how compound interest works in simple terms"],["Write for me","Draft an email, essay, or post","Help me write a professional email asking for a meeting"],["Plan it out","Build a schedule or step-by-step plan","Help me plan a productive weekly schedule"],["Fix my code","Debug or write a script","Write a Python script that renames all files in a folder"]];
+function load(k,d){try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}}
+let chats=load("sutton_chats",[]).filter(c=>c.msgs&&c.msgs.length),mem=load("sutton_mem",[]),cur=null,busy=false;
+function save(){try{localStorage.setItem("sutton_chats",JSON.stringify(chats));localStorage.setItem("sutton_mem",JSON.stringify(mem))}catch(e){}}
+const esc=s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+function md(t){return esc(t).split("```").map((p,i)=>i%2?"<pre><code>"+p.replace(/^\w*\n/,"")+"</code></pre>":p.replace(/^#{1,6} (.+)$/gm,"<b>$1</b>").replace(/^[ \t]*[-*] /gm,"\u2022 ").replace(/`([^`]+)`/g,"<code>$1</code>").replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>")).join("")}
+function toast(t){const e=$("toast");e.textContent=t;e.className="show";setTimeout(()=>e.className="",2200)}
+function closeSide(){$("side").classList.remove("open");$("ov").style.display="none"}
+function renderList(){
+  const l=$("list");l.innerHTML="";
+  if(chats.length){const b=document.createElement("div");b.className="lab";b.textContent="Chats";l.appendChild(b)}
+  chats.forEach(c=>{
+    const d=document.createElement("div");d.className="ci"+(cur===c?" on":"");
+    const s=document.createElement("span");s.textContent=c.title;
+    const x=document.createElement("button");x.className="x";x.textContent="\u00d7";x.title="Delete";
+    x.onclick=e=>{e.stopPropagation();chats=chats.filter(k=>k!==c);if(cur===c)cur=null;save();render()};
+    d.onclick=()=>{cur=c;render();closeSide()};
+    d.append(s,x);l.appendChild(d);
+  });
+}
+function hero(){
+  log.innerHTML='<div id="hero"><div class="mark">S</div><h2>What can I help with?</h2><p>Ask me anything, or pick one to start.</p><div class="cards">'+CARDS.map((c,i)=>'<button class="card" data-i="'+i+'"><b>'+c[0]+'</b><span>'+c[1]+'</span></button>').join("")+'</div></div>';
+  log.querySelectorAll(".card").forEach(b=>b.onclick=()=>{inp.value=CARDS[b.dataset.i][2];go()});
+}
+function add(role,html){
+  const d=document.createElement("div");d.className="msg "+role;
+  if(role==="assistant"){const a=document.createElement("div");a.className="av";a.textContent="S";d.appendChild(a)}
+  const c=document.createElement("div");c.className="col";
+  const b=document.createElement("div");b.className="bub";b.innerHTML=html;
+  c.appendChild(b);d.appendChild(c);log.appendChild(d);chat.scrollTop=chat.scrollHeight;
+  return {b,c};
+}
+function addCopy(c,text){
+  const k=document.createElement("button");k.className="cp";k.textContent="Copy";
+  k.onclick=()=>{try{navigator.clipboard.writeText(text);k.textContent="Copied"}catch(e){}setTimeout(()=>k.textContent="Copy",1500)};
+  c.appendChild(k);
+}
+function render(){
+  log.innerHTML="";
+  if(!cur||!cur.msgs.length)hero();
+  else cur.msgs.forEach(m=>{const r=add(m.role,m.role==="user"?esc(m.content):md(m.content));if(m.role==="assistant")addCopy(r.c,m.content)});
+  renderList();$("title").textContent=cur?cur.title:"Sutton AI";
+}
+function learn(t){
+  let n=0;
+  t=t.replace(/\[\[remember:\s*([^\]]+?)\s*\]\]/gi,(m,f)=>{f=f.slice(0,200);if(!mem.some(x=>x.toLowerCase()===f.toLowerCase())&&mem.length<40){mem.push(f);n++}return""});
+  t=t.replace(/\[\[forget:\s*([^\]]+?)\s*\]\]/gi,(m,k)=>{k=k.toLowerCase();const b=mem.length;mem=mem.filter(x=>!x.toLowerCase().includes(k));if(mem.length<b)toast("Memory updated");return""});
+  if(n)toast("Memory saved");
+  return t.trim();
+}
+async function reveal(b,t){
+  const w=t.split(/(\s+)/);let s="";
+  for(let i=0;i<w.length;i++){s+=w[i];if(i%6===0){b.innerHTML=md(s);chat.scrollTop=chat.scrollHeight;await new Promise(r=>setTimeout(r,10))}}
+  b.innerHTML=md(t);chat.scrollTop=chat.scrollHeight;
+}
+async function go(){
+  const text=inp.value.trim();if(!text||busy)return;
+  if(!cur){cur={id:String(Date.now()),title:text.slice(0,40),msgs:[]};chats.unshift(cur)}
+  if(!cur.msgs.length)log.innerHTML="";
+  busy=true;send.disabled=true;inp.value="";inp.style.height="auto";
+  cur.msgs.push({role:"user",content:text});add("user",esc(text));renderList();
+  const r=add("assistant",'<span class="dots"><i></i><i></i><i></i></span>');
+  try{
+    const res=await fetch("/api/chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({messages:cur.msgs,memory:mem})});
+    const d=await res.json();
+    if(!res.ok)throw new Error(d.error||"Something went wrong");
+    const reply=learn(d.reply)||"Sorry, I could not answer that. Try rephrasing.";
+    cur.msgs.push({role:"assistant",content:reply});
+    await reveal(r.b,reply);addCopy(r.c,reply);
+  }catch(e){r.b.textContent="Error: "+e.message;cur.msgs.pop();inp.value=text}
+  save();busy=false;send.disabled=!inp.value.trim();renderList();
+}
+function renderMem(){
+  const l=$("mlist");l.innerHTML="";
+  if(!mem.length){const p=document.createElement("p");p.textContent='Nothing saved yet. Try saying "remember that I like short answers".';l.appendChild(p)}
+  mem.forEach((f,i)=>{
+    const d=document.createElement("div");d.className="mi";
+    const s=document.createElement("span");s.textContent=f;
+    const x=document.createElement("button");x.textContent="\u00d7";x.onclick=()=>{mem.splice(i,1);save();renderMem()};
+    d.append(s,x);l.appendChild(d);
+  });
+}
+inp.addEventListener("input",()=>{inp.style.height="auto";inp.style.height=inp.scrollHeight+"px";send.disabled=busy||!inp.value.trim()});
+inp.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();go()}});
+send.onclick=go;
+$("newb").onclick=()=>{cur=null;render();closeSide()};
+$("menu").onclick=()=>{$("side").classList.add("open");$("ov").style.display="block"};
+$("ov").onclick=closeSide;
+$("memb").onclick=()=>{renderMem();$("modal").style.display="flex";closeSide()};
+$("mclose").onclick=()=>{$("modal").style.display="none"};
+$("modal").onclick=e=>{if(e.target.id==="modal")$("modal").style.display="none"};
+$("maddb").onclick=()=>{const v=$("madd").value.trim().slice(0,200);if(v&&mem.length<40){mem.push(v);$("madd").value="";save();renderMem()}};
+$("mclear").onclick=()=>{mem=[];save();renderMem()};
+render();
+</script>
+</body>
+</html>
