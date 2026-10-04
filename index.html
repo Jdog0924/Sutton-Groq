@@ -105,6 +105,11 @@ textarea{line-height:24px;padding:7px 4px}
 .gen a.cp{display:inline-block;text-decoration:none}
 .ph{width:min(100%,320px);aspect-ratio:1;border-radius:14px;background:linear-gradient(110deg,var(--card) 30%,var(--bub) 50%,var(--card) 70%);background-size:200% 100%;animation:sh 1.4s linear infinite;display:grid;place-items:center;color:var(--mut);font-size:14px}
 @keyframes sh{to{background-position:-200% 0}}
+#incbar{display:none;text-align:center;font-size:13px;padding:8px 14px;background:#2b1e44;color:#d8c8ff;border-bottom:1px solid #43306b}
+body.incog #incbar{display:block}
+body.incog #side{background:#120d1f}
+#incb{gap:8px}
+body.incog #incb{background:#2b1e44;color:#e5dcff}
 </style>
 </head>
 <body>
@@ -112,11 +117,13 @@ textarea{line-height:24px;padding:7px 4px}
   <div class="logo"><div class="mark">S</div>Sutton AI</div>
   <button class="nb" id="newb">+ New chat</button>
   <div id="list"></div>
+  <button class="nb" id="incb"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></svg><span id="incl">Incognito</span></button>
   <button class="nb" id="memb">Memory</button>
 </aside>
 <div id="ov"></div>
 <div id="main">
   <div id="top"><button id="menu">&#9776;</button><span id="title">Sutton AI</span></div>
+  <div id="incbar">Incognito chat: nothing here is saved, and memory is off. It disappears when you refresh or leave.</div>
   <div id="chat"><div class="wrap" id="log"></div></div>
   <div id="bar">
     <div id="prev"></div>
@@ -135,6 +142,7 @@ textarea{line-height:24px;padding:7px 4px}
 <script>
 const $=id=>document.getElementById(id),log=$("log"),inp=$("in"),send=$("send"),chat=$("chat");
 const CARDS=[["Explain something","Break down a tricky topic simply","Explain how compound interest works in simple terms"],["Write for me","Draft an email, essay, or post","Help me write a professional email asking for a meeting"],["Plan it out","Build a schedule or step-by-step plan","Help me plan a productive weekly schedule"],["Fix my code","Debug or write a script","Write a Python script that renames all files in a folder"],["Make an image","Describe it and I will draw it","Create an image of a glowing futuristic city at sunset"],["Brainstorm ideas","Get creative project or business ideas","Give me 10 creative side project ideas"]];
+let incog=false;
 function load(k,d){try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}}
 let chats=load("sutton_chats",[]).filter(c=>c.msgs&&c.msgs.length),mem=load("sutton_mem",[]),cur=null,busy=false;
 function save(){try{localStorage.setItem("sutton_chats",JSON.stringify(chats.map(c=>({...c,msgs:c.msgs.map(m=>{const {full,fullImg,...r}=m;return r})}))));localStorage.setItem("sutton_mem",JSON.stringify(mem))}catch(e){}}
@@ -144,6 +152,7 @@ function toast(t){const e=$("toast");e.textContent=t;e.className="show";setTimeo
 function closeSide(){$("side").classList.remove("open");$("ov").style.display="none"}
 function renderList(){
   const l=$("list");l.innerHTML="";
+  if(incog){const b=document.createElement("div");b.className="lab";b.textContent="Incognito: chats are not saved";l.appendChild(b);return}
   if(chats.length){const b=document.createElement("div");b.className="lab";b.textContent="Chats";l.appendChild(b)}
   chats.forEach(c=>{
     const d=document.createElement("div");d.className="ci"+(cur===c?" on":"");
@@ -155,7 +164,7 @@ function renderList(){
   });
 }
 function hero(){
-  log.innerHTML='<div id="hero"><div class="mark">S</div><h2>What can I help with?</h2><p>Ask me anything, or pick one to start.</p><div class="cards">'+CARDS.map((c,i)=>'<button class="card" data-i="'+i+'"><b>'+c[0]+'</b><span>'+c[1]+'</span></button>').join("")+'</div></div>';
+  log.innerHTML='<div id="hero"><div class="mark">S</div><h2>What can I help with?</h2><p>'+(incog?"Nothing in this chat is saved, and memory is off.":"Ask me anything, or pick one to start.")+'</p><div class="cards">'+CARDS.map((c,i)=>'<button class="card" data-i="'+i+'"><b>'+c[0]+'</b><span>'+c[1]+'</span></button>').join("")+'</div></div>';
   log.querySelectorAll(".card").forEach(b=>b.onclick=()=>{inp.value=CARDS[b.dataset.i][2];go()});
 }
 function add(role,html){
@@ -175,9 +184,10 @@ function render(){
   log.innerHTML="";
   if(!cur||!cur.msgs.length)hero();
   else cur.msgs.forEach(m=>{const r=add(m.role,m.role==="user"?esc(m.content):md(m.content));if(m.thumbs)r.c.insertBefore(imgStrip(m.thumbs),r.b);if(m.role==="assistant"){if(m.genImg){const bx=document.createElement("div");bx.className="gen";showImg(bx,m);r.c.appendChild(bx)}addCopy(r.c,m.content)}});
-  renderList();$("title").textContent=cur?cur.title:"Sutton AI";
+  renderList();$("title").textContent=cur?cur.title:(incog?"Incognito":"Sutton AI");
 }
 function learn(t){
+  if(incog)return t.replace(/\[\[(remember|forget):[^\]]*\]\]/gi,"").trim();
   let n=0;
   t=t.replace(/\[\[remember:\s*([^\]]+?)\s*\]\]/gi,(m,f)=>{f=f.slice(0,200);if(!mem.some(x=>x.toLowerCase()===f.toLowerCase())&&mem.length<40){mem.push(f);n++}return""});
   t=t.replace(/\[\[forget:\s*([^\]]+?)\s*\]\]/gi,(m,k)=>{k=k.toLowerCase();const b=mem.length;mem=mem.filter(x=>!x.toLowerCase().includes(k));if(mem.length<b)toast("Memory updated");return""});
@@ -225,7 +235,7 @@ async function go(){
   const text=inp.value.trim();if((!text&&!pending.length)||busy)return;
   if(listening){rec.onresult=null;try{rec.abort()}catch(e){}}
   const imgs=pending;pending=[];renderPrev();
-  if(!cur){cur={id:String(Date.now()),title:(text||"Photo chat").slice(0,40),msgs:[]};chats.unshift(cur)}
+  if(!cur){cur={id:String(Date.now()),title:(text||"Photo chat").slice(0,40),msgs:[]};if(!incog)chats.unshift(cur)}
   if(!cur.msgs.length)log.innerHTML="";
   busy=true;send.disabled=true;inp.value="";inp.style.height="auto";
   const m={role:"user",content:text||"Take a look at this image."};
@@ -237,7 +247,7 @@ async function go(){
   const keep=new Set(cur.msgs.map((x,i)=>x.full?i:-1).filter(i=>i>=0).slice(-2));
   const payload=cur.msgs.map((x,i)=>keep.has(i)?{role:x.role,content:x.content,images:x.full}:{role:x.role,content:x.content+(x.thumbs?" [a photo was attached here]":"")+(x.genImg?" [an image was generated here]":"")});
   try{
-    const res=await fetch("/api/chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({messages:payload,memory:mem})});
+    const res=await fetch("/api/chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({messages:payload,memory:incog?[]:mem})});
     const d=await res.json();
     if(!res.ok)throw new Error(d.error||"Something went wrong");
     let [reply,ip]=splitImg(learn(d.reply));
@@ -272,7 +282,7 @@ document.addEventListener("drop",e=>{e.preventDefault();addFiles(e.dataTransfer.
 $("newb").onclick=()=>{cur=null;render();closeSide()};
 $("menu").onclick=()=>{$("side").classList.add("open");$("ov").style.display="block"};
 $("ov").onclick=closeSide;
-$("memb").onclick=()=>{renderMem();$("modal").style.display="flex";closeSide()};
+$("memb").onclick=()=>{if(incog){toast("Memory is off in incognito");return}renderMem();$("modal").style.display="flex";closeSide()};
 $("mclose").onclick=()=>{$("modal").style.display="none"};
 $("modal").onclick=e=>{if(e.target.id==="modal")$("modal").style.display="none"};
 $("maddb").onclick=()=>{const v=$("madd").value.trim().slice(0,200);if(v&&mem.length<40){mem.push(v);$("madd").value="";save();renderMem()}};
@@ -291,6 +301,14 @@ $("mic").onclick=()=>{
   rec.onend=()=>{listening=false;$("mic").classList.remove("on");inp.focus()};
   try{rec.start()}catch(e){}
 };
+function setIncog(on){
+  if(busy){toast("Wait for the reply to finish");return}
+  incog=on;document.body.classList.toggle("incog",on);
+  $("incl").textContent=on?"Leave incognito":"Incognito";
+  cur=null;render();closeSide();
+  toast(on?"Incognito on: chats and memory are not saved":"Incognito off");
+}
+$("incb").onclick=()=>setIncog(!incog);
 render();
 </script>
 </body>
