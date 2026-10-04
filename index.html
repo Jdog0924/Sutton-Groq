@@ -39,6 +39,9 @@ textarea{flex:1;background:none;border:0;outline:0;color:var(--text);font:inheri
 @keyframes b{50%{opacity:.2}}
 @media (max-width:700px){#side{display:none}}
 </style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
 </head>
 <body>
 <div id="side"><h1>Sutton AI</h1><button id="new">+ New chat</button></div>
@@ -58,13 +61,24 @@ function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g
 function md(t){
   let parts=esc(t).split("```");
   return parts.map((p,i)=>i%2?"<pre><code>"+p.replace(/^\w*\n/,"")+"</code></pre>":
-    p.replace(/`([^`]+)`/g,"<code>$1</code>").replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>")).join("");
+    p.replace(/^#{1,6} (.+)/gm,"<b>1</b>").replace(/^\s*[-*] /gm,"\u2022 ").replace(/`([^`]+)`/g,"<code>$1</code>").replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>")).join("");
+}
+function mathify(el){
+  if(!window.renderMathInElement)return;
+  try{renderMathInElement(el,{delimiters:[
+    {left:"
+",right:"
+",display:true},
+    {left:"\\[",right:"\\]",display:true},
+    {left:"\\(",right:"\\)",display:false},
+    {left:"",right:"",display:false}
+  ],throwOnError:false})}catch(e){}
 }
 function add(role,text,raw){
   const d=document.createElement("div");d.className="msg "+role;
   const b=document.createElement("div");b.className="bub";
   b.innerHTML=raw?text:(role==="user"?esc(text):md(text));
-  d.appendChild(b);log.appendChild(d);chat.scrollTop=chat.scrollHeight;return b;
+  d.appendChild(b);log.appendChild(d);if(role==="assistant"&&!raw)mathify(b);chat.scrollTop=chat.scrollHeight;return b;
 }
 function hero(){log.innerHTML='<div id="hero"><h2>Sutton AI</h2><p>Ask me anything you want to understand.</p></div>'}
 function render(){log.innerHTML="";if(!msgs.length)hero();msgs.forEach(m=>add(m.role,m.content))}
@@ -78,7 +92,7 @@ async function go(){
     const r=await fetch("/api/chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({messages:msgs})});
     const d=await r.json();
     if(!r.ok)throw new Error(d.error||"Something went wrong");
-    msgs.push({role:"assistant",content:d.reply});b.innerHTML=md(d.reply);
+    msgs.push({role:"assistant",content:d.reply});b.innerHTML=md(d.reply);mathify(b);
   }catch(e){b.textContent="Error: "+e.message;msgs.pop()}
   save();busy=false;send.disabled=!inp.value.trim();chat.scrollTop=chat.scrollHeight;
 }
@@ -87,6 +101,8 @@ inp.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDef
 send.onclick=go;
 document.getElementById("new").onclick=()=>{msgs=[];save();render()};
 render();
+window.addEventListener("load",render);
 </script>
 </body>
 </html>
+
