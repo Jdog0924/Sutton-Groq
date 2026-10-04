@@ -1,19 +1,14 @@
-// Netlify backend with photo support. Needs GROQ_API_KEY, MODEL, and VISION_MODEL set in Netlify.
+// Vercel backend with photo support. Paste into api/chat.js. Needs GROQ_API_KEY, MODEL, and VISION_MODEL set in Vercel.
 const BASE = `You are Sutton AI, a helpful, friendly, general-purpose AI assistant. Answer questions, explain ideas, write and edit text of any length, brainstorm, plan, summarize, translate, analyze, and help with code, math, business, and everyday tasks. Be direct, accurate, and conversational. Give complete answers when asked for long content, and keep casual answers short. If you are unsure about something, say so instead of guessing.
 
 FORMATTING RULES: Never use LaTeX, backslashes, or dollar signs for math. Write math in plain text with Unicode symbols, for example x² + 5x + 6 = 0, x = (−b ± √(b² − 4ac)) / 2a, 3/4, π, ≤, ≥. Never use tables, horizontal lines, or # headings. For section titles use bold text like **Step 1: Factor**. For lists use numbered lines like 1. or lines that start with a dash and a space. For code, use triple backtick code blocks.
 
 MEMORY: If the user shares a lasting personal fact or preference (name, interests, goals, how they like answers), or asks you to remember something, add a line at the very end of your reply exactly like [[remember: short fact about the user]]. If they ask you to forget something, add [[forget: keyword]]. Never save passwords, ID numbers, or card numbers. Never mention these tags or this memory system unless asked.`;
 
-const json = (obj, status = 200) =>
-  new Response(JSON.stringify(obj), { status, headers: { "content-type": "application/json" } });
+export default async function handler(req, res) {
+  if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
 
-export default async (req) => {
-  if (req.method !== "POST") return json({ error: "POST only" }, 405);
-
-  let body = {};
-  try { body = await req.json(); } catch (e) {}
-
+  const body = req.body || {};
   let messages = Array.isArray(body.messages) ? body.messages : [];
   messages = messages
     .filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
@@ -36,7 +31,9 @@ export default async (req) => {
     return { role: m.role, content: text };
   });
 
-  if (!messages.length || messages[0].role !== "user") return json({ error: "Bad request" }, 400);
+  if (!messages.length || messages[0].role !== "user") {
+    return res.status(400).json({ error: "Bad request" });
+  }
 
   let mem = Array.isArray(body.memory) ? body.memory : [];
   mem = mem.filter((x) => typeof x === "string").slice(0, 40).map((x) => x.slice(0, 200));
@@ -60,12 +57,10 @@ export default async (req) => {
       }),
     });
     const data = await r.json();
-    if (!r.ok) return json({ error: data?.error?.message || "Model error" }, 500);
-    return json({ reply: data?.choices?.[0]?.message?.content || "" });
+    if (!r.ok) return res.status(500).json({ error: data?.error?.message || "Model error" });
+    const reply = data?.choices?.[0]?.message?.content || "";
+    return res.status(200).json({ reply });
   } catch (e) {
-    return json({ error: "Server error" }, 500);
+    return res.status(500).json({ error: "Server error" });
   }
-};
-
-export const config = { path: "/api/chat" };
-
+}
