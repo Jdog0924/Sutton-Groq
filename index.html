@@ -59,6 +59,10 @@ textarea{flex:1;background:none;border:0;outline:0;color:var(--text);font:inheri
 #attach:hover{color:var(--text);background:var(--card)}
 .uimgs{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;margin-bottom:6px}
 .uimgs img{max-width:200px;max-height:200px;border-radius:14px;display:block}
+#mic{width:38px;height:38px;border-radius:50%;color:var(--mut);flex-shrink:0;margin-right:4px;display:grid;place-items:center}
+#mic:hover{color:var(--text);background:var(--card)}
+#mic.on{background:#e5484d;color:#fff;animation:pulse 1.2s infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 7px rgba(229,72,77,.25)}}
 #send{width:38px;height:38px;border-radius:50%;background:var(--g);color:#fff;font-size:18px;font-weight:700}
 #send:disabled{opacity:.35;cursor:default}
 #note{text-align:center;color:var(--mut);font-size:12px;margin-top:8px}
@@ -102,7 +106,7 @@ textarea{flex:1;background:none;border:0;outline:0;color:var(--text);font:inheri
   <div id="chat"><div class="wrap" id="log"></div></div>
   <div id="bar">
     <div id="prev"></div>
-    <div id="box"><button id="attach" title="Add photos">+</button><input type="file" id="file" accept="image/*" multiple hidden><textarea id="in" rows="1" placeholder="Message Sutton AI"></textarea><button id="send" disabled>&#8593;</button></div>
+    <div id="box"><button id="attach" title="Add photos">+</button><input type="file" id="file" accept="image/*" multiple hidden><textarea id="in" rows="1" placeholder="Message Sutton AI"></textarea><button id="mic" title="Voice input"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></svg></button><button id="send" disabled>&#8593;</button></div>
     <div id="note">Sutton AI can make mistakes. Double check important info.</div>
   </div>
 </div>
@@ -189,6 +193,7 @@ function renderPrev(){
 }
 async function go(){
   const text=inp.value.trim();if((!text&&!pending.length)||busy)return;
+  if(listening){rec.onresult=null;try{rec.abort()}catch(e){}}
   const imgs=pending;pending=[];renderPrev();
   if(!cur){cur={id:String(Date.now()),title:(text||"Photo chat").slice(0,40),msgs:[]};chats.unshift(cur)}
   if(!cur.msgs.length)log.innerHTML="";
@@ -237,6 +242,20 @@ $("mclose").onclick=()=>{$("modal").style.display="none"};
 $("modal").onclick=e=>{if(e.target.id==="modal")$("modal").style.display="none"};
 $("maddb").onclick=()=>{const v=$("madd").value.trim().slice(0,200);if(v&&mem.length<40){mem.push(v);$("madd").value="";save();renderMem()}};
 $("mclear").onclick=()=>{mem=[];save();renderMem()};
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+let rec=null,listening=false,base="";
+if(!SR)$("mic").style.display="none";
+$("mic").onclick=()=>{
+  if(!SR)return;
+  if(listening){try{rec.stop()}catch(e){}return}
+  rec=new SR();rec.lang=navigator.language||"en-US";rec.interimResults=true;rec.continuous=true;
+  base=inp.value&&!/\s$/.test(inp.value)?inp.value+" ":inp.value;
+  rec.onstart=()=>{listening=true;$("mic").classList.add("on")};
+  rec.onresult=e=>{let t="";for(let i=0;i<e.results.length;i++)t+=e.results[i][0].transcript;inp.value=base+t;inp.dispatchEvent(new Event("input"))};
+  rec.onerror=e=>{if(e.error==="not-allowed"||e.error==="service-not-allowed")toast("Microphone is blocked. Allow it in your browser settings.");else if(e.error!=="no-speech"&&e.error!=="aborted")toast("Voice input error: "+e.error)};
+  rec.onend=()=>{listening=false;$("mic").classList.remove("on");inp.focus()};
+  try{rec.start()}catch(e){}
+};
 render();
 </script>
 </body>
